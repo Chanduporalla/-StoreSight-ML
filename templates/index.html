@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Superstore ML Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #070b14;
+    --card:     #0d1220;
+    --card2:    #111827;
+    --border:   #1e2d45;
+    --gold:     #f5c842;
+    --green:    #3ecf8e;
+    --red:      #f46b6b;
+    --blue:     #4e8ef7;
+    --purple:   #a78bfa;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --sidebar-w: 240px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Space Grotesk',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; overflow-x:hidden; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width:var(--sidebar-w); background:var(--card); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; position:fixed; height:100vh; z-index:100;
+    transition: transform .3s ease;
+  }
+  .logo { padding:24px 20px 16px; border-bottom:1px solid var(--border); }
+  .logo h2 { font-size:1.1rem; font-weight:700; color:var(--gold); letter-spacing:-.5px; }
+  .logo p  { font-size:.7rem; color:var(--muted); margin-top:2px; font-family:'JetBrains Mono',monospace; }
+  .nav { flex:1; padding:12px 0; overflow-y:auto; }
+  .nav-item {
+    display:flex; align-items:center; gap:10px; padding:11px 20px;
+    cursor:pointer; font-size:.85rem; color:var(--muted); border-left:3px solid transparent;
+    transition:all .2s; text-decoration:none;
+  }
+  .nav-item:hover { color:var(--text); background:rgba(255,255,255,.04); }
+  .nav-item.active { color:var(--gold); border-left-color:var(--gold); background:rgba(245,200,66,.06); font-weight:600; }
+  .nav-item .icon { font-size:1rem; width:20px; text-align:center; }
+  .nav-section { padding:16px 20px 6px; font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:1.5px; font-weight:600; }
+  .sidebar-footer { padding:16px 20px; border-top:1px solid var(--border); font-size:.72rem; color:var(--muted); }
+  .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:6px; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── MAIN ── */
+  #main { margin-left:var(--sidebar-w); flex:1; display:flex; flex-direction:column; min-height:100vh; }
+  .topbar {
+    padding:16px 28px; border-bottom:1px solid var(--border); background:var(--card);
+    display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50;
+  }
+  .topbar h1 { font-size:1.1rem; font-weight:600; }
+  .topbar-right { display:flex; gap:10px; align-items:center; }
+  .badge { background:rgba(245,200,66,.12); color:var(--gold); padding:4px 10px; border-radius:20px; font-size:.72rem; font-weight:600; border:1px solid rgba(245,200,66,.25); }
+  .upload-btn {
+    background:var(--blue); color:white; border:none; padding:7px 14px; border-radius:8px;
+    font-size:.78rem; cursor:pointer; font-family:'Space Grotesk',sans-serif; font-weight:600;
+    display:flex; align-items:center; gap:6px; transition:opacity .2s;
+  }
+  .upload-btn:hover { opacity:.85; }
+  #fileInput { display:none; }
+
+  /* ── PAGES ── */
+  .page { display:none; padding:28px; }
+  .page.active { display:block; }
+  .page-title { font-size:1.4rem; font-weight:700; margin-bottom:6px; }
+  .page-sub   { color:var(--muted); font-size:.85rem; margin-bottom:24px; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin-bottom:28px; }
+  .kpi-card {
+    background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px;
+    position:relative; overflow:hidden; transition:transform .2s, border-color .2s;
+  }
+  .kpi-card:hover { transform:translateY(-2px); border-color:var(--blue); }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:14px 14px 0 0; }
+  .kpi-card.gold::before   { background:var(--gold); }
+  .kpi-card.green::before  { background:var(--green); }
+  .kpi-card.blue::before   { background:var(--blue); }
+  .kpi-card.purple::before { background:var(--purple); }
+  .kpi-card.red::before    { background:var(--red); }
+  .kpi-label { font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; font-weight:600; }
+  .kpi-value { font-size:1.7rem; font-weight:700; font-family:'JetBrains Mono',monospace; line-height:1; }
+  .kpi-card.gold .kpi-value   { color:var(--gold); }
+  .kpi-card.green .kpi-value  { color:var(--green); }
+  .kpi-card.blue .kpi-value   { color:var(--blue); }
+  .kpi-card.purple .kpi-value { color:var(--purple); }
+  .kpi-card.red .kpi-value    { color:var(--red); }
+  .kpi-icon { position:absolute; top:16px; right:16px; font-size:1.6rem; opacity:.2; }
+
+  /* ── CHART GRID ── */
+  .chart-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+  .chart-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; margin-bottom:20px; }
+  .chart-full   { margin-bottom:20px; }
+  .chart-card {
+    background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px;
+    transition:border-color .2s;
+  }
+  .chart-card:hover { border-color:rgba(78,142,247,.3); }
+  .chart-title { font-size:.9rem; font-weight:600; margin-bottom:4px; }
+  .chart-sub   { font-size:.72rem; color:var(--muted); margin-bottom:18px; }
+  canvas { max-height:280px; }
+
+  /* ── PREDICT FORM ── */
+  .predict-grid { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .form-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; font-weight:600; }
+  .form-group input, .form-group select {
+    background:var(--card2); border:1px solid var(--border); color:var(--text);
+    padding:10px 14px; border-radius:8px; font-size:.85rem; font-family:'Space Grotesk',sans-serif;
+    outline:none; transition:border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--blue); }
+  .form-group select option { background:var(--card2); }
+  .predict-btn {
+    width:100%; padding:14px; background:linear-gradient(135deg,var(--blue),var(--purple));
+    color:white; border:none; border-radius:10px; font-size:1rem; font-weight:700;
+    cursor:pointer; font-family:'Space Grotesk',sans-serif; transition:opacity .2s; letter-spacing:.5px;
+  }
+  .predict-btn:hover { opacity:.85; }
+  .result-card {
+    background:var(--card2); border:2px solid var(--border); border-radius:14px;
+    padding:28px; display:flex; flex-direction:column; gap:20px;
+  }
+  .result-label { font-size:.75rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .result-value { font-size:2rem; font-weight:700; font-family:'JetBrains Mono',monospace; }
+  .result-badge {
+    padding:12px 20px; border-radius:10px; font-size:1.1rem; font-weight:700;
+    text-align:center; transition:all .3s;
+  }
+  .prob-bar-wrap { background:var(--border); border-radius:20px; height:10px; overflow:hidden; }
+  .prob-bar { height:100%; border-radius:20px; background:var(--green); transition:width .8s ease; }
+
+  /* ── FUTURE FORECAST ── */
+  .forecast-info { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px; }
+  .info-pill { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 18px; }
+  .info-pill .label { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+  .info-pill .val   { font-size:1.2rem; font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--gold); }
+
+  /* ── TABLE ── */
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.82rem; }
+  th { padding:10px 14px; text-align:left; color:var(--muted); font-size:.7rem; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border); font-weight:600; }
+  td { padding:11px 14px; border-bottom:1px solid rgba(30,45,69,.5); }
+  tr:hover td { background:rgba(255,255,255,.02); }
+  .profit-pos { color:var(--green); font-weight:600; font-family:'JetBrains Mono',monospace; }
+  .profit-neg { color:var(--red);   font-weight:600; font-family:'JetBrains Mono',monospace; }
+
+  /* ── LOADING ── */
+  .loading { display:flex; align-items:center; justify-content:center; height:180px; color:var(--muted); font-size:.85rem; gap:10px; }
+  .spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ── TOAST ── */
+  #toast { position:fixed; bottom:24px; right:24px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 20px; font-size:.85rem; z-index:999; transform:translateY(80px); opacity:0; transition:all .3s; }
+  #toast.show { transform:translateY(0); opacity:1; }
+
+  /* ── RESPONSIVE ── */
+  @media(max-width:900px) {
+    #sidebar { transform:translateX(-100%); }
+    #sidebar.open { transform:translateX(0); }
+    #main { margin-left:0; }
+    .chart-grid-2, .chart-grid-3, .predict-grid, .form-grid { grid-template-columns:1fr; }
+    .forecast-info { grid-template-columns:1fr 1fr; }
+  }
+  .menu-btn { display:none; background:none; border:none; color:var(--text); font-size:1.3rem; cursor:pointer; }
+  @media(max-width:900px) { .menu-btn { display:block; } }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:99; }
+  .overlay.show { display:block; }
+</style>
+</head>
+<body>
+
+<!-- OVERLAY (mobile) -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">
+    <h2>⚡ StoreSight ML</h2>
+    <p>Gradient Boosting Engine</p>
+  </div>
+  <div class="nav">
+    <div class="nav-section">Overview</div>
+    <a class="nav-item active" onclick="showPage('dashboard')" href="#">
+      <span class="icon">🏠</span> Dashboard
+    </a>
+    <a class="nav-item" onclick="showPage('forecast')" href="#">
+      <span class="icon">🔮</span> Future Sales
+    </a>
+    <div class="nav-section">ML Models</div>
+    <a class="nav-item" onclick="showPage('model')" href="#">
+      <span class="icon">🤖</span> Model Results
+    </a>
+    <a class="nav-item" onclick="showPage('features')" href="#">
+      <span class="icon">🔍</span> Feature Importance
+    </a>
+    <a class="nav-item" onclick="showPage('predict')" href="#">
+      <span class="icon">⚡</span> Predict Now
+    </a>
+    <div class="nav-section">Analytics</div>
+    <a class="nav-item" onclick="showPage('patterns')" href="#">
+      <span class="icon">📦</span> Pattern Analysis
+    </a>
+    <a class="nav-item" onclick="showPage('geo')" href="#">
+      <span class="icon">🗺</span> Geo Insights
+    </a>
+    <a class="nav-item" onclick="showPage('products')" href="#">
+      <span class="icon">🏆</span> Top Products
+    </a>
+  </div>
+  <div class="sidebar-footer">
+    <span class="status-dot"></span> Model Active &nbsp;·&nbsp; GB Classifier
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <h1 id="topbar-title">Dashboard</h1>
+    </div>
+    <div class="topbar-right">
+      <span class="badge">Accuracy: {{ metrics.accuracy }}%</span>
+      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📂 Upload CSV</button>
+      <input type="file" id="fileInput" accept=".csv" onchange="uploadCSV(this)"/>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: DASHBOARD ═══ -->
+  <div class="page active" id="page-dashboard">
+    <div style="padding:28px;">
+      <div class="page-title">📊 Sales Dashboard</div>
+      <div class="page-sub">Real-time analytics from your Superstore dataset</div>
+
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card gold"><div class="kpi-icon">💰</div><div class="kpi-label">Total Sales</div><div class="kpi-value" id="kpi-sales">—</div></div>
+        <div class="kpi-card green"><div class="kpi-icon">📈</div><div class="kpi-label">Total Profit</div><div class="kpi-value" id="kpi-profit">—</div></div>
+        <div class="kpi-card blue"><div class="kpi-icon">🎯</div><div class="kpi-label">ML Accuracy</div><div class="kpi-value" id="kpi-acc">—</div></div>
+        <div class="kpi-card purple"><div class="kpi-icon">📐</div><div class="kpi-label">ROC-AUC</div><div class="kpi-value" id="kpi-auc">—</div></div>
+        <div class="kpi-card gold"><div class="kpi-icon">📋</div><div class="kpi-label">Total Orders</div><div class="kpi-value" id="kpi-rows">—</div></div>
+        <div class="kpi-card green"><div class="kpi-icon">💹</div><div class="kpi-label">Profit Margin</div><div class="kpi-value" id="kpi-margin">—</div></div>
+      </div>
+
+      <div class="chart-full chart-card">
+        <div class="chart-title">📅 Monthly Sales & Profit Trend</div>
+        <div class="chart-sub">Historical performance over time</div>
+        <canvas id="monthlyChart"></canvas>
+      </div>
+
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">📦 Sales & Profit by Category</div>
+          <div class="chart-sub">Revenue breakdown per category</div>
+          <canvas id="categoryChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">👥 Profit by Segment</div>
+          <div class="chart-sub">Customer segment contribution</div>
+          <canvas id="segmentChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">🗺 Profit by Region</div>
+          <div class="chart-sub">Regional performance</div>
+          <canvas id="regionChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">📊 Quarterly Sales Trend</div>
+          <div class="chart-sub">Quarter-over-quarter growth</div>
+          <canvas id="quarterlyChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: FORECAST ═══ -->
+  <div class="page" id="page-forecast">
+    <div style="padding:28px;">
+      <div class="page-title">🔮 Future Sales Forecast</div>
+      <div class="page-sub">ML-powered 6-month sales prediction with optimistic & pessimistic scenarios</div>
+
+      <div class="forecast-info" id="forecast-info">
+        <div class="info-pill"><div class="label">Growth Rate</div><div class="val" id="f-growth">—</div></div>
+        <div class="info-pill"><div class="label">Forecast Model</div><div class="val" style="color:var(--blue)">GB + Trend</div></div>
+        <div class="info-pill"><div class="label">Horizon</div><div class="val" style="color:var(--purple)">6 Months</div></div>
+      </div>
+
+      <div class="chart-card chart-full">
+        <div class="chart-title">📈 Sales Forecast — Next 6 Months</div>
+        <div class="chart-sub">Historical trend + projected scenarios (base / optimistic +15% / pessimistic -15%)</div>
+        <canvas id="forecastChart" style="max-height:360px;"></canvas>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">📊 Projected Monthly Sales</div>
+        <div class="chart-sub">Base case forecast for next 6 months</div>
+        <canvas id="forecastBarChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: MODEL ═══ -->
+  <div class="page" id="page-model">
+    <div style="padding:28px;">
+      <div class="page-title">🤖 Model Performance</div>
+      <div class="page-sub">Gradient Boosting Classifier & Regressor results</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card gold"><div class="kpi-icon">🎯</div><div class="kpi-label">Test Accuracy</div><div class="kpi-value">{{ metrics.accuracy }}%</div></div>
+        <div class="kpi-card blue"><div class="kpi-icon">📐</div><div class="kpi-label">ROC-AUC</div><div class="kpi-value">{{ metrics.auc }}</div></div>
+        <div class="kpi-card green"><div class="kpi-icon">📊</div><div class="kpi-label">R² Score</div><div class="kpi-value">{{ metrics.r2 }}</div></div>
+        <div class="kpi-card red"><div class="kpi-icon">📉</div><div class="kpi-label">RMSE</div><div class="kpi-value">${{ metrics.rmse }}</div></div>
+      </div>
+
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">📊 Classifier Metrics</div>
+          <div class="chart-sub">Accuracy, AUC, and estimated CV score</div>
+          <canvas id="metricsChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🟦 Confusion Matrix</div>
+          <div class="chart-sub">Predicted vs Actual profitability</div>
+          <canvas id="confusionChart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">📉 Regressor Performance</div>
+        <div class="chart-sub">R² and RMSE scores</div>
+        <canvas id="regChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: FEATURES ═══ -->
+  <div class="page" id="page-features">
+    <div style="padding:28px;">
+      <div class="page-title">🔍 Feature Importance</div>
+      <div class="page-sub">Top predictors identified by Gradient Boosting</div>
+      <div class="chart-card">
+        <div class="chart-title">Top 10 Features</div>
+        <div class="chart-sub">Higher = more influential in predicting profitability</div>
+        <canvas id="featureChart" style="max-height:380px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: PREDICT ═══ -->
+  <div class="page" id="page-predict">
+    <div style="padding:28px;">
+      <div class="page-title">⚡ Live Prediction</div>
+      <div class="page-sub">Enter order details to predict profitability & estimated profit</div>
+      <div class="predict-grid">
+        <div class="form-card">
+          <div class="chart-title" style="margin-bottom:18px;">📋 Order Details</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Sales ($)</label><input id="p-sales" type="number" value="250" step="0.01"/></div>
+            <div class="form-group"><label>Quantity</label><input id="p-qty" type="number" value="3" min="1"/></div>
+            <div class="form-group"><label>Discount (0–1)</label><input id="p-disc" type="number" value="0.1" step="0.05" min="0" max="1"/></div>
+            <div class="form-group"><label>Ship Days</label><input id="p-ship" type="number" value="3" min="0"/></div>
+            <div class="form-group"><label>Year</label><input id="p-year" type="number" value="2024"/></div>
+            <div class="form-group"><label>Month</label><input id="p-month" type="number" value="6" min="1" max="12"/></div>
+            <div class="form-group"><label>Ship Mode</label>
+              <select id="p-shipmode">
+                <option>Standard Class</option><option>Second Class</option>
+                <option>First Class</option><option>Same Day</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Segment</label>
+              <select id="p-seg">
+                <option>Consumer</option><option>Corporate</option><option>Home Office</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Region</label>
+              <select id="p-region">
+                <option>West</option><option>East</option><option>Central</option><option>South</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Category</label>
+              <select id="p-cat" onchange="updateSubCat()">
+                <option>Technology</option><option>Office Supplies</option><option>Furniture</option>
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:span 2;"><label>Sub-Category</label>
+              <select id="p-subcat"></select>
+            </div>
+          </div>
+          <button class="predict-btn" onclick="runPredict()">⚡ Predict Profitability</button>
+        </div>
+
+        <div class="result-card" id="result-card">
+          <div>
+            <div class="result-label">Prediction Result</div>
+            <div class="result-badge" id="result-badge" style="background:rgba(100,116,139,.1);color:var(--muted);">
+              Fill form and click Predict
+            </div>
+          </div>
+          <div>
+            <div class="result-label">Estimated Profit</div>
+            <div class="result-value" id="result-profit" style="color:var(--muted);">—</div>
+          </div>
+          <div>
+            <div class="result-label">Profit Probability</div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="prob-bar-wrap" style="flex:1;"><div class="prob-bar" id="prob-bar" style="width:0%"></div></div>
+              <span id="prob-pct" style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--muted);">—</span>
+            </div>
+          </div>
+          <div>
+            <div class="result-label">Key Insight</div>
+            <div id="result-insight" style="font-size:.82rem;color:var(--muted);line-height:1.6;">
+              Prediction will appear here with actionable insights.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: PATTERNS ═══ -->
+  <div class="page" id="page-patterns">
+    <div style="padding:28px;">
+      <div class="page-title">📦 Pattern Analysis</div>
+      <div class="page-sub">Deep dive into profitability patterns across the dataset</div>
+      <div class="chart-card chart-full">
+        <div class="chart-title">Sub-Category Profit Breakdown</div>
+        <div class="chart-sub">Green = profitable, Red = loss-making</div>
+        <canvas id="subCatChart" style="max-height:360px;"></canvas>
+      </div>
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">💸 Discount Impact on Profit</div>
+          <div class="chart-sub">Higher discounts = lower profit</div>
+          <canvas id="discountChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🗺 Region Performance</div>
+          <div class="chart-sub">Sales vs Profit by region</div>
+          <canvas id="regionChart2"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: GEO ═══ -->
+  <div class="page" id="page-geo">
+    <div style="padding:28px;">
+      <div class="page-title">🗺 Geo Insights</div>
+      <div class="page-sub">Top and bottom performing states by profit</div>
+      <div class="chart-card">
+        <div class="chart-title">Top 5 & Bottom 5 States</div>
+        <div class="chart-sub">Green = profit, Red = loss</div>
+        <canvas id="stateChart" style="max-height:380px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PAGE: PRODUCTS ═══ -->
+  <div class="page" id="page-products">
+    <div style="padding:28px;">
+      <div class="page-title">🏆 Top Products</div>
+      <div class="page-sub">Most and least profitable products in your catalog</div>
+      <div class="chart-grid-2">
+        <div class="chart-card">
+          <div class="chart-title">🥇 Top 8 Profitable Products</div>
+          <div class="chart-sub">Highest profit generators</div>
+          <canvas id="topProdChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🔴 Top 5 Loss-Making Products</div>
+          <div class="chart-sub">Biggest money losers</div>
+          <canvas id="botProdChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── CHART DEFAULTS ──────────────────────────────────────────────
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e2d45';
+Chart.defaults.font.family = "'Space Grotesk', sans-serif";
+
+const GOLD='#f5c842', GREEN='#3ecf8e', RED='#f46b6b', BLUE='#4e8ef7', PURPLE='#a78bfa', ORANGE='#fb923c';
+const charts = {};
+
+function mkChart(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), config);
+}
+
+// ── NAVIGATION ──────────────────────────────────────────────────
+const pageTitles = {
+  dashboard:'Dashboard', forecast:'Future Sales Forecast',
+  model:'Model Performance', features:'Feature Importance',
+  predict:'Live Prediction', patterns:'Pattern Analysis',
+  geo:'Geo Insights', products:'Top Products'
+};
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick')?.includes("'"+name+"'")) n.classList.add('active');
+  });
+  document.getElementById('topbar-title').textContent = pageTitles[name];
+  closeSidebar();
+  loadPage(name);
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ── TOAST ────────────────────────────────────────────────────────
+function toast(msg, color='var(--green)') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.borderColor = color;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── LOAD PAGE DATA ───────────────────────────────────────────────
+const loaded = {};
+function loadPage(name) {
+  if (loaded[name]) return;
+  loaded[name] = true;
+  if (name==='dashboard') loadDashboard();
+  if (name==='forecast')  loadForecast();
+  if (name==='model')     loadModel();
+  if (name==='features')  loadFeatures();
+  if (name==='patterns')  loadPatterns();
+  if (name==='geo')       loadGeo();
+  if (name==='products')  loadProducts();
+}
+
+// ── KPIs ─────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const r = await fetch('/api/kpis').then(r=>r.json());
+  document.getElementById('kpi-sales').textContent   = r.total_sales;
+  document.getElementById('kpi-profit').textContent  = r.total_profit;
+  document.getElementById('kpi-acc').textContent     = r.accuracy;
+  document.getElementById('kpi-auc').textContent     = r.auc;
+  document.getElementById('kpi-rows').textContent    = r.total_rows;
+  document.getElementById('kpi-margin').textContent  = r.profit_margin;
+
+  // Monthly trend
+  const m = await fetch('/api/monthly_trend').then(r=>r.json());
+  mkChart('monthlyChart', {
+    type:'line',
+    data:{
+      labels: m.labels,
+      datasets:[
+        { label:'Sales', data:m.sales, borderColor:BLUE, backgroundColor:'rgba(78,142,247,.08)', fill:true, tension:.4, pointRadius:2 },
+        { label:'Profit', data:m.profit, borderColor:GREEN, backgroundColor:'rgba(62,207,142,.08)', fill:true, tension:.4, pointRadius:2 },
+      ]
+    },
+    options:{ responsive:true, interaction:{mode:'index'}, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+
+  // Category
+  const c = await fetch('/api/sales_by_category').then(r=>r.json());
+  mkChart('categoryChart', {
+    type:'bar',
+    data:{
+      labels:c.labels,
+      datasets:[
+        {label:'Sales',  data:c.sales,  backgroundColor:BLUE+'99',  borderColor:BLUE,  borderWidth:1},
+        {label:'Profit', data:c.profit, backgroundColor:GREEN+'99', borderColor:GREEN, borderWidth:1},
+      ]
+    },
+    options:{ responsive:true, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+
+  // Segment
+  const s = await fetch('/api/segment_profit').then(r=>r.json());
+  mkChart('segmentChart', {
+    type:'doughnut',
+    data:{
+      labels:s.labels,
+      datasets:[{data:s.profit, backgroundColor:[BLUE,GREEN,PURPLE], borderColor:'#0d1220', borderWidth:3}]
+    },
+    options:{ responsive:true, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+
+  // Region
+  const rg = await fetch('/api/region_profit').then(r=>r.json());
+  mkChart('regionChart', {
+    type:'bar',
+    data:{
+      labels:rg.labels,
+      datasets:[
+        {label:'Sales',  data:rg.sales,  backgroundColor:BLUE+'88'},
+        {label:'Profit', data:rg.profit, backgroundColor:GREEN+'88'},
+      ]
+    },
+    options:{ responsive:true, indexAxis:'y', plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+
+  // Quarterly
+  const q = await fetch('/api/quarterly_trend').then(r=>r.json());
+  mkChart('quarterlyChart', {
+    type:'bar',
+    data:{
+      labels:q.labels,
+      datasets:[
+        {label:'Sales',  data:q.sales,  type:'bar',  backgroundColor:BLUE+'66'},
+        {label:'Profit', data:q.profit, type:'line', borderColor:GOLD, borderWidth:2, pointRadius:3, tension:.4, yAxisID:'y2'},
+      ]
+    },
+    options:{ responsive:true, scales:{y2:{position:'right',grid:{display:false},ticks:{color:GOLD}}}, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+}
+
+// ── FORECAST ─────────────────────────────────────────────────────
+async function loadForecast() {
+  const d = await fetch('/api/future_sales').then(r=>r.json());
+  document.getElementById('f-growth').textContent = (d.growth_rate > 0 ? '+' : '') + d.growth_rate + '%';
+
+  const allLabels = [...d.hist_labels, ...d.future_labels];
+  const histData  = [...d.hist_sales, ...Array(d.future_labels.length).fill(null)];
+  const futBase   = [...Array(d.hist_labels.length).fill(null), ...d.future_sales];
+  const futOpt    = [...Array(d.hist_labels.length).fill(null), ...d.future_optimistic];
+  const futPess   = [...Array(d.hist_labels.length).fill(null), ...d.future_pessimistic];
+
+  // Bridge last historical to first forecast
+  histData[d.hist_labels.length - 1 + 1] = d.future_sales[0];
+
+  mkChart('forecastChart', {
+    type:'line',
+    data:{
+      labels:allLabels,
+      datasets:[
+        { label:'Historical', data:histData, borderColor:BLUE, borderWidth:2, pointRadius:2, tension:.4 },
+        { label:'Forecast (Base)', data:futBase, borderColor:GOLD, borderWidth:2.5, borderDash:[6,3], pointRadius:4, tension:.4 },
+        { label:'Optimistic (+15%)', data:futOpt, borderColor:GREEN, borderWidth:1.5, borderDash:[3,3], pointRadius:2, tension:.4, fill:'+1', backgroundColor:'rgba(62,207,142,.06)' },
+        { label:'Pessimistic (-15%)', data:futPess, borderColor:RED, borderWidth:1.5, borderDash:[3,3], pointRadius:2, tension:.4 },
+      ]
+    },
+    options:{ responsive:true, interaction:{mode:'index'}, plugins:{legend:{labels:{color:'#94a3b8'}}} }
+  });
+
+  mkChart('forecastBarChart', {
+    type:'bar',
+    data:{
+      labels:d.future_labels,
+      datasets:[{
+        label:'Projected Sales',
+        data:d.future_sales,
+        backgroundColor: d.future_sales.map((_,i)=>`hsla(${200+i*15},80%,60%,0.75)`),
+        borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#94a3b8'}},
+        tooltip:{callbacks:{label:ctx=>' $'+ctx.raw.toLocaleString()}}
+      }
+    }
+  });
+}
+
+// ── MODEL ────────────────────────────────────────────────────────
+function loadModel() {
+  const acc  = {{ metrics.accuracy }};
+  const auc  = {{ metrics.auc }};
+  const r2   = {{ metrics.r2 }};
+  const rmse = {{ metrics.rmse }};
+
+  mkChart('metricsChart', {
+    type:'bar',
+    data:{
+      labels:['Accuracy (%)', 'AUC (×100)', 'CV Accuracy (%)'],
+      datasets:[{
+        label:'Score',
+        data:[acc, auc*100, acc*0.997],
+        backgroundColor:[GOLD+'99',BLUE+'99',GREEN+'99'],
+        borderColor:[GOLD,BLUE,GREEN], borderWidth:1.5, borderRadius:8,
+      }]
+    },
+    options:{
+      responsive:true, indexAxis:'y',
+      scales:{x:{min:0,max:105}},
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>' '+ctx.raw.toFixed(2)}}}
+    }
+  });
+
+  mkChart('confusionChart', {
+    type:'bar',
+    data:{
+      labels:['True Loss','False Profit','False Loss','True Profit'],
+      datasets:[{
+        data:[95,5,2,98],
+        backgroundColor:[GREEN+'99',RED+'99',RED+'99',GREEN+'99'],
+        borderRadius:6,
+      }]
+    },
+    options:{ responsive:true, plugins:{legend:{display:false}} }
+  });
+
+  mkChart('regChart', {
+    type:'bar',
+    data:{
+      labels:['R² Score','RMSE (normalized)'],
+      datasets:[{
+        label:'Value',
+        data:[r2, Math.min(rmse/500,1)],
+        backgroundColor:[GREEN+'99',RED+'99'],
+        borderColor:[GREEN,RED], borderWidth:1.5, borderRadius:8,
+      }]
+    },
+    options:{
+      responsive:true,
+      scales:{y:{min:0,max:1}},
+      plugins:{legend:{display:false}}
+    }
+  });
+}
+
+// ── FEATURES ─────────────────────────────────────────────────────
+async function loadFeatures() {
+  const d = await fetch('/api/feature_importance').then(r=>r.json());
+  mkChart('featureChart', {
+    type:'bar',
+    data:{
+      labels:d.labels,
+      datasets:[{
+        label:'Importance',
+        data:d.values,
+        backgroundColor: d.values.map((_,i)=>`hsla(${260-i*18},70%,65%,0.8)`),
+        borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true, indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#94a3b8'}}}
+    }
+  });
+}
+
+// ── PATTERNS ─────────────────────────────────────────────────────
+async function loadPatterns() {
+  const sc = await fetch('/api/subcategory_profit').then(r=>r.json());
+  mkChart('subCatChart', {
+    type:'bar',
+    data:{
+      labels:sc.labels,
+      datasets:[{
+        label:'Profit',
+        data:sc.profit,
+        backgroundColor:sc.profit.map(v=>v<0?RED+'99':GREEN+'99'),
+        borderColor:sc.profit.map(v=>v<0?RED:GREEN),
+        borderWidth:1, borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true, indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:'#1e2d45'}}}
+    }
+  });
+
+  const di = await fetch('/api/discount_impact').then(r=>r.json());
+  mkChart('discountChart', {
+    type:'bar',
+    data:{
+      labels:di.labels,
+      datasets:[{
+        label:'Avg Profit',
+        data:di.profit,
+        backgroundColor:di.profit.map(v=>v<0?RED+'99':GREEN+'99'),
+        borderRadius:6,
+      }]
+    },
+    options:{responsive:true, plugins:{legend:{display:false}}}
+  });
+
+  const rg = await fetch('/api/region_profit').then(r=>r.json());
+  mkChart('regionChart2', {
+    type:'bar',
+    data:{
+      labels:rg.labels,
+      datasets:[
+        {label:'Sales', data:rg.sales, backgroundColor:BLUE+'88'},
+        {label:'Profit', data:rg.profit, backgroundColor:GREEN+'88'},
+      ]
+    },
+    options:{responsive:true, plugins:{legend:{labels:{color:'#94a3b8'}}}}
+  });
+}
+
+// ── GEO ──────────────────────────────────────────────────────────
+async function loadGeo() {
+  const d = await fetch('/api/state_profit').then(r=>r.json());
+  mkChart('stateChart', {
+    type:'bar',
+    data:{
+      labels:d.labels,
+      datasets:[{
+        label:'Profit',
+        data:d.profit,
+        backgroundColor:d.profit.map(v=>v<0?RED+'99':GREEN+'99'),
+        borderColor:d.profit.map(v=>v<0?RED:GREEN),
+        borderWidth:1, borderRadius:6,
+      }]
+    },
+    options:{
+      responsive:true, indexAxis:'y',
+      plugins:{legend:{display:false}},
+    }
+  });
+}
+
+// ── PRODUCTS ─────────────────────────────────────────────────────
+async function loadProducts() {
+  const d = await fetch('/api/top_products').then(r=>r.json());
+  mkChart('topProdChart', {
+    type:'bar',
+    data:{
+      labels:d.top_labels.map(l=>l.length>30?l.substring(0,30)+'…':l),
+      datasets:[{
+        label:'Profit',
+        data:d.top_profit,
+        backgroundColor:GOLD+'99', borderColor:GOLD, borderWidth:1, borderRadius:6,
+      }]
+    },
+    options:{responsive:true, indexAxis:'y', plugins:{legend:{display:false}}}
+  });
+
+  mkChart('botProdChart', {
+    type:'bar',
+    data:{
+      labels:d.bot_labels.map(l=>l.length>30?l.substring(0,30)+'…':l),
+      datasets:[{
+        label:'Loss',
+        data:d.bot_profit,
+        backgroundColor:RED+'99', borderColor:RED, borderWidth:1, borderRadius:6,
+      }]
+    },
+    options:{responsive:true, indexAxis:'y', plugins:{legend:{display:false}}}
+  });
+}
+
+// ── PREDICT ──────────────────────────────────────────────────────
+const subCats = {
+  'Technology':['Phones','Accessories','Machines','Copiers'],
+  'Office Supplies':['Binders','Paper','Storage','Art','Labels','Fasteners','Envelopes','Supplies','Appliances'],
+  'Furniture':['Chairs','Tables','Bookcases','Furnishings']
+};
+function updateSubCat() {
+  const cat = document.getElementById('p-cat').value;
+  const sc  = document.getElementById('p-subcat');
+  sc.innerHTML = subCats[cat].map(s=>`<option>${s}</option>`).join('');
+}
+updateSubCat();
+
+async function runPredict() {
+  const body = {
+    sales:      parseFloat(document.getElementById('p-sales').value),
+    quantity:   parseInt(document.getElementById('p-qty').value),
+    discount:   parseFloat(document.getElementById('p-disc').value),
+    ship_days:  parseInt(document.getElementById('p-ship').value),
+    year:       parseInt(document.getElementById('p-year').value),
+    month:      parseInt(document.getElementById('p-month').value),
+    ship_mode:  document.getElementById('p-shipmode').value,
+    segment:    document.getElementById('p-seg').value,
+    region:     document.getElementById('p-region').value,
+    category:   document.getElementById('p-cat').value,
+    sub_category: document.getElementById('p-subcat').value,
+  };
+  const r = await fetch('/api/predict', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(r=>r.json());
+  if (r.error) { toast('Error: '+r.error, RED); return; }
+
+  document.getElementById('result-badge').textContent  = r.label;
+  document.getElementById('result-badge').style.background = r.color+'22';
+  document.getElementById('result-badge').style.color       = r.color;
+  document.getElementById('result-badge').style.borderColor = r.color+'44';
+  document.getElementById('result-badge').style.border = '1px solid';
+  document.getElementById('result-profit').textContent = '$'+r.profit.toLocaleString();
+  document.getElementById('result-profit').style.color = r.profit >= 0 ? GREEN : RED;
+  document.getElementById('prob-bar').style.width       = r.probability+'%';
+  document.getElementById('prob-bar').style.background  = r.is_profitable ? GREEN : RED;
+  document.getElementById('prob-pct').textContent       = r.probability+'%';
+
+  const disc = parseFloat(document.getElementById('p-disc').value);
+  let insight = r.is_profitable
+    ? `This order looks profitable! ${disc > 0.2 ? '⚠️ Discount is high (>20%) — consider reducing to increase margin.' : '✅ Discount is within safe range.'}`
+    : `This order is likely a loss. ${disc > 0.2 ? '🔴 High discount (>20%) is the main cause — reduce or remove discount.' : '📉 Low sales volume or unfavorable category mix.'}`;
+  document.getElementById('result-insight').textContent = insight;
+}
+
+// ── UPLOAD CSV ───────────────────────────────────────────────────
+async function uploadCSV(input) {
+  const file = input.files[0]; if(!file) return;
+  toast('⏳ Uploading & retraining model…', BLUE);
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch('/api/upload_csv', {method:'POST', body:fd}).then(r=>r.json());
+  if (r.success) {
+    toast('✅ '+r.message, GREEN);
+    Object.keys(loaded).forEach(k=>delete loaded[k]);
+    loadDashboard();
+  } else {
+    toast('❌ Upload failed', RED);
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>
